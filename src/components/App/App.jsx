@@ -1,42 +1,84 @@
 import { useState, useEffect } from "react";
-import { nanoid } from "nanoid";
-import initialContacts from "../../contacts.json";
-import Contact from "../Contact/Contact";
-import ContactForm from "../ContactForm/ContactForm";
-import ContactList from "../ContactList/ContactList";
-import SearchBox from "../SearchBox/SearchBox";
-import css from "./App.module.css";
+import axios from "axios";
+import toast, { Toaster } from "react-hot-toast";
+import SearchBar from "../SearchBar/SearchBar";
+import ImageGallery from "../ImageGallery/ImageGallery";
+import Loader from "../Loader/Loader";
+import ErrorMessage from "../ErrorMessage/ErrorMessage";
+import LoadMoreBtn from "../LoadMoreBtn/LoadMoreBtn";
+import ImageModal from "../ImageModal/ImageModal";
+
+const API_KEY = "iShxM2emJPHjdrzU9HiKqc7umEc94uvGxRyZPA3xkAQ";
+const BASE_URL = "https://api.unsplash.com/search/photos";
 
 export default function App() {
-  const [contacts, setContacts] = useState(() => {
-    const savedContacts = localStorage.getItem("contacts");
-    return savedContacts ? JSON.parse(savedContacts) : initialContacts;
-  });
-  const [filter, setFilter] = useState("");
+  const [query, setQuery] = useState("");
+  const [images, setImage] = useState([]);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
 
-  useEffect(() => {
-    localStorage.setItem("contacts", JSON.stringify(contacts));
-  }, [contacts]);
-
-  function addContact(name, number) {
-    const newContact = { id: nanoid(), name, number };
-    setContacts((prev) => [...prev, newContact]);
+  function openModal(image) {
+    setSelectedImage(image);
+    setIsOpen(true);
   }
 
-  const deleteContact = (id) => {
-    setContacts((prev) => prev.filter((contact) => contact.id !== id));
+  function closeModal() {
+    setSelectedImage(null);
+    setIsOpen(false);
+  }
+
+  useEffect(() => {
+    if (!query) return;
+
+    async function fetchImages() {
+      try {
+        setError(null);
+        setLoading(true);
+        const response = await axios.get(BASE_URL, {
+          params: { query, page, per_page: 12 },
+          headers: { Authorization: `Client-ID ${API_KEY}` },
+        });
+
+        setImage((prev) => [...prev, ...response.data.results]);
+      } catch (err) {
+        setError("Failed to fetch images. Try again.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchImages();
+  }, [query, page]);
+
+  const handleSearch = (newQuery) => {
+    if (newQuery.trim() === "") {
+      toast.error("Please enter a search query.");
+      return;
+    }
+    setQuery(newQuery);
+    setImage([]);
+    setPage(1);
   };
 
-  const filteredContacts = contacts.filter((contact) =>
-    contact.name.toLowerCase().includes(filter.toLowerCase())
-  );
-
   return (
-    <div className={css.app}>
-      <h1>Phonebook</h1>
-      <ContactForm addContact={addContact} />
-      <SearchBox filter={filter} setFilter={setFilter} />
-      <ContactList contacts={filteredContacts} deleteContact={deleteContact} />
-    </div>
+    <>
+      <SearchBar onSubmit={handleSearch} />
+      {error && <ErrorMessage message={error} />}
+      <ImageGallery images={images} openModal={openModal} />
+      {loading && <Loader />}
+      {images.length > 0 && (
+        <LoadMoreBtn onClick={() => setPage((prev) => prev + 1)} />
+      )}
+
+      <ImageModal
+        isOpen={isOpen}
+        closeModal={closeModal}
+        image={selectedImage}
+      />
+      <Toaster position="top-right" reverseOrder={false} />
+    </>
   );
 }
